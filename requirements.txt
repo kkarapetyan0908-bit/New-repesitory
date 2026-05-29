@@ -1,6 +1,9 @@
 aiogram==3.12.0
 pydantic==2.8.2
+qrcode==7.4.2
+aiosqlite==0.20.0
 
+# Для сборки
 setuptools>=75.0.0
 wheel
 pip>=24.0
