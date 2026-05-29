@@ -1,0 +1,64 @@
+import asyncio
+import os
+from io import BytesIO
+import qrcode
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+import aiosqlite
+
+# ================= НАСТРОЙКИ =================
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
+# ============================================
+
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher()
+
+async def init_db():
+    async with aiosqlite.connect("loyalty.db") as db:
+        await db.execute('''CREATE TABLE IF NOT EXISTS users 
+                           (user_id INTEGER PRIMARY KEY, balance INTEGER DEFAULT 0)''')
+        await db.commit()
+
+@dp.message(Command("start"))
+async def start(message: types.Message):
+    user_id = message.from_user.id
+    args = message.text.split()
+
+    # Если админ сканирует QR клиента
+    if len(args) > 1 and user_id == ADMIN_ID:
+        try:
+            target_id = int(args[1])
+            await message.answer(f"👤 Клиент: {target_id}\n\nНапиши сколько Бали начислить:")
+        except:
+            await message.answer("❌ Ошибка ID клиента")
+        return
+
+    # Обычный пользователь
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="💳 Показать мою карту", callback_data="show_card")
+    ]])
+    await message.answer("👋 Добро пожаловать в программу лояльности!", reply_markup=kb)
+
+@dp.callback_query(lambda c: c.data == "show_card")
+async def show_card(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    link = f"https://t.me/{(await bot.get_me()).username}?start={user_id}"
+    
+    qr = qrcode.make(link)
+    bio = BytesIO()
+    qr.save(bio, "PNG")
+    bio.seek(0)
+    
+    await callback.message.answer_photo(
+        types.BufferedInputFile(bio.read(), "card.png"),
+        caption="📱 Покажи этот QR-код кассиру"
+    )
+
+async def main():
+    await init_db()
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
